@@ -33,12 +33,8 @@ const maxKeyLen = chunkSize - 16 - 4 - 1
 // It is safe to store entries smaller than 64KB with SetBig.
 //
 // k and v contents may be modified after returning from SetBig.
-func (c *Cache) SetBig(k, v []byte) {
+func (c *Cache) SetBig(k uint64, v []byte) {
 	atomic.AddUint64(&c.bigStats.SetBigCalls, 1)
-	if len(k) > maxKeyLen {
-		atomic.AddUint64(&c.bigStats.TooBigKeyErrors, 1)
-		return
-	}
 	valueLen := len(v)
 	valueHash := xxhash.Sum64(v)
 
@@ -48,6 +44,7 @@ func (c *Cache) SetBig(k, v []byte) {
 	for len(v) > 0 {
 		subkey.B = marshalUint64(subkey.B[:0], valueHash)
 		subkey.B = marshalUint64(subkey.B, uint64(i))
+		hSubkeyB := xxhash.Sum64(subkey.B)
 		i++
 		subvalueLen := maxSubvalueLen
 		if len(v) < subvalueLen {
@@ -55,7 +52,7 @@ func (c *Cache) SetBig(k, v []byte) {
 		}
 		subvalue := v[:subvalueLen]
 		v = v[subvalueLen:]
-		c.Set(subkey.B, subvalue)
+		c.Set(hSubkeyB, subvalue)
 	}
 
 	// Write metavalue, which consists of valueHash and valueLen.
@@ -72,7 +69,7 @@ func (c *Cache) SetBig(k, v []byte) {
 // with values stored via other methods.
 //
 // k contents may be modified after returning from GetBig.
-func (c *Cache) GetBig(dst, k []byte) (r []byte) {
+func (c *Cache) GetBig(dst []byte, k uint64) (r []byte) {
 	atomic.AddUint64(&c.bigStats.GetBigCalls, 1)
 	subkey := getSubkeyBuf()
 	dstWasNil := dst == nil
@@ -108,8 +105,9 @@ func (c *Cache) GetBig(dst, k []byte) (r []byte) {
 	for uint64(len(dst)-dstLen) < valueLen {
 		subkey.B = marshalUint64(subkey.B[:0], valueHash)
 		subkey.B = marshalUint64(subkey.B, uint64(i))
+		hSubkeyB := xxhash.Sum64(subkey.B)
 		i++
-		dstNew := c.Get(dst, subkey.B)
+		dstNew := c.Get(dst, hSubkeyB)
 		if len(dstNew) == len(dst) {
 			// Cannot find subvalue
 			return dst[:dstLen]

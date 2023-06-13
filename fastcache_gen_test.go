@@ -2,7 +2,6 @@ package fastcache
 
 import (
 	"bytes"
-	"strconv"
 	"testing"
 )
 
@@ -16,13 +15,13 @@ func TestGenerationOverflow(t *testing.T) {
 	// generations up much faster.  The keys and values are sized so that
 	// every time we push them into the cache they will completely fill the
 	// bucket
-	key1 := []byte(strconv.Itoa(26))
-	bigVal1 := make([]byte, (32*1024)-(len(key1)+4))
+	key1 := uint64(26)
+	bigVal1 := make([]byte, (32*1024)-(4))
 	for i := range bigVal1 {
 		bigVal1[i] = 1
 	}
-	key2 := []byte(strconv.Itoa(8))
-	bigVal2 := make([]byte, (32*1024)-(len(key2)+5))
+	key2 := uint64(8)
+	bigVal2 := make([]byte, (32*1024)-(4))
 	for i := range bigVal2 {
 		bigVal2[i] = 2
 	}
@@ -85,7 +84,7 @@ func TestGenerationOverflow(t *testing.T) {
 	}
 }
 
-func getVal(t *testing.T, c *Cache, key, expected []byte) {
+func getVal(t *testing.T, c *Cache, key uint64, expected []byte) {
 	t.Helper()
 	get := c.Get(nil, key)
 	if !bytes.Equal(get, expected) {

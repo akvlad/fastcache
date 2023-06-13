@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-
-	xxhash "github.com/cespare/xxhash/v2"
 )
 
 const bucketsCount = 512
@@ -145,10 +143,9 @@ func New(maxBytes int) *Cache {
 // SetBig can be used for storing entries exceeding 64KB.
 //
 // k and v contents may be modified after returning from Set.
-func (c *Cache) Set(k, v []byte) {
-	h := xxhash.Sum64(k)
-	idx := h % bucketsCount
-	c.buckets[idx].Set(k, v, h)
+func (c *Cache) Set(k uint64, v []byte) {
+	idx := k % bucketsCount
+	c.buckets[idx].Set(k, v)
 }
 
 // Get appends value by the key k to dst and returns the result.
@@ -158,37 +155,41 @@ func (c *Cache) Set(k, v []byte) {
 // Get returns only values stored in c via Set.
 //
 // k contents may be modified after returning from Get.
-func (c *Cache) Get(dst, k []byte) []byte {
-	h := xxhash.Sum64(k)
-	idx := h % bucketsCount
-	dst, _ = c.buckets[idx].Get(dst, k, h, true)
+func (c *Cache) Get(dst []byte, k uint64) []byte {
+	idx := k % bucketsCount
+	dst, _ = c.buckets[idx].Get(dst, k, true)
 	return dst
 }
 
 // HasGet works identically to Get, but also returns whether the given key
 // exists in the cache. This method makes it possible to differentiate between a
 // stored nil/empty value versus and non-existing value.
-func (c *Cache) HasGet(dst, k []byte) ([]byte, bool) {
-	h := xxhash.Sum64(k)
-	idx := h % bucketsCount
-	return c.buckets[idx].Get(dst, k, h, true)
+func (c *Cache) HasGet(dst []byte, k uint64) ([]byte, bool) {
+	idx := k % bucketsCount
+	return c.buckets[idx].Get(dst, k, true)
+}
+
+func (c *Cache) GetKeys() []uint64 {
+	var keys []uint64
+	for i := range c.buckets {
+		keys = append(keys, c.buckets[i].GetKeys()...)
+	}
+	return keys
 }
 
 // Has returns true if entry for the given key k exists in the cache.
-func (c *Cache) Has(k []byte) bool {
-	h := xxhash.Sum64(k)
-	idx := h % bucketsCount
-	_, ok := c.buckets[idx].Get(nil, k, h, false)
+func (c *Cache) Has(k uint64) bool {
+	idx := k % bucketsCount
+	_, ok := c.buckets[idx].Get(nil, k, false)
 	return ok
 }
 
 // Del deletes value for the given k from the cache.
 //
 // k contents may be modified after returning from Del.
-func (c *Cache) Del(k []byte) {
-	h := xxhash.Sum64(k)
-	idx := h % bucketsCount
-	c.buckets[idx].Del(h)
+func (c *Cache) Del(k uint64) {
+	idx := k % bucketsCount
+	c.buckets[idx].Del(k)
 }
 
 // Reset removes all the items from the cache.
@@ -300,19 +301,24 @@ func (b *bucket) UpdateStats(s *Stats) {
 	b.mu.RUnlock()
 }
 
-func (b *bucket) Set(k, v []byte, h uint64) {
-	atomic.AddUint64(&b.setCalls, 1)
-	if len(k) >= (1<<16) || len(v) >= (1<<16) {
-		// Too big key or value - its length cannot be encoded
-		// with 2 bytes (see below). Skip the entry.
-		return
+func (b *bucket) GetKeys() []uint64 {
+	b.mu.RLock()
+	keys := make([]uint64, 0, len(b.m))
+	for k := range b.m {
+		keys = append(keys, k)
 	}
+	b.mu.RUnlock()
+	return keys
+}
+
+func (b *bucket) Set(k uint64, v []byte) {
+	atomic.AddUint64(&b.setCalls, 1)
 	var kvLenBuf [4]byte
-	kvLenBuf[0] = byte(uint16(len(k)) >> 8)
-	kvLenBuf[1] = byte(len(k))
+	kvLenBuf[0] = 0
+	kvLenBuf[1] = 0
 	kvLenBuf[2] = byte(uint16(len(v)) >> 8)
 	kvLenBuf[3] = byte(len(v))
-	kvLen := uint64(len(kvLenBuf) + len(k) + len(v))
+	kvLen := uint64(len(kvLenBuf) + len(v))
 	if kvLen >= chunkSize {
 		// Do not store too big keys and values, since they do not
 		// fit a chunk.
@@ -349,10 +355,9 @@ func (b *bucket) Set(k, v []byte, h uint64) {
 		chunk = chunk[:0]
 	}
 	chunk = append(chunk, kvLenBuf[:]...)
-	chunk = append(chunk, k...)
 	chunk = append(chunk, v...)
 	chunks[chunkIdx] = chunk
-	b.m[h] = idx | (b.gen << bucketSizeBits)
+	b.m[k] = idx | (b.gen << bucketSizeBits)
 	b.idx = idxNew
 	if needClean {
 		b.cleanLocked()
@@ -360,12 +365,12 @@ func (b *bucket) Set(k, v []byte, h uint64) {
 	b.mu.Unlock()
 }
 
-func (b *bucket) Get(dst, k []byte, h uint64, returnDst bool) ([]byte, bool) {
+func (b *bucket) Get(dst []byte, k uint64, returnDst bool) ([]byte, bool) {
 	atomic.AddUint64(&b.getCalls, 1)
 	found := false
 	chunks := b.chunks
 	b.mu.RLock()
-	v := b.m[h]
+	v := b.m[k]
 	bGen := b.gen & ((1 << genSizeBits) - 1)
 	if v > 0 {
 		gen := v >> bucketSizeBits
@@ -385,7 +390,7 @@ func (b *bucket) Get(dst, k []byte, h uint64, returnDst bool) ([]byte, bool) {
 				goto end
 			}
 			kvLenBuf := chunk[idx : idx+4]
-			keyLen := (uint64(kvLenBuf[0]) << 8) | uint64(kvLenBuf[1])
+			keyLen := uint64(0)
 			valLen := (uint64(kvLenBuf[2]) << 8) | uint64(kvLenBuf[3])
 			idx += 4
 			if idx+keyLen+valLen >= chunkSize {
@@ -393,15 +398,10 @@ func (b *bucket) Get(dst, k []byte, h uint64, returnDst bool) ([]byte, bool) {
 				atomic.AddUint64(&b.corruptions, 1)
 				goto end
 			}
-			if string(k) == string(chunk[idx:idx+keyLen]) {
-				idx += keyLen
-				if returnDst {
-					dst = append(dst, chunk[idx:idx+valLen]...)
-				}
-				found = true
-			} else {
-				atomic.AddUint64(&b.collisions, 1)
+			if returnDst {
+				dst = append(dst, chunk[idx:idx+valLen]...)
 			}
+			found = true
 		}
 	}
 end:

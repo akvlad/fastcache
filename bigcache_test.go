@@ -19,13 +19,13 @@ func TestSetGetBig(t *testing.T) {
 }
 
 func testSetGetBig(t *testing.T, c *Cache, valueSize, valuesCount, seed int) {
-	m := make(map[string][]byte)
+	m := make(map[uint64][]byte)
 	var buf []byte
 	for i := 0; i < valuesCount; i++ {
-		key := []byte(fmt.Sprintf("key %d", i))
+		key := uint64(i)
 		value := createValue(valueSize, seed)
 		c.SetBig(key, value)
-		m[string(key)] = value
+		m[key] = value
 		buf = c.GetBig(buf[:0], key)
 		if !bytes.Equal(buf, value) {
 			t.Fatalf("seed=%d; unexpected value obtained for key=%q; got len(value)=%d; want len(value)=%d", seed, key, len(buf), len(value))
@@ -42,7 +42,7 @@ func testSetGetBig(t *testing.T, c *Cache, valueSize, valuesCount, seed int) {
 
 	// Verify that values stil exist
 	for key, value := range m {
-		buf = c.GetBig(buf[:0], []byte(key))
+		buf = c.GetBig(buf[:0], key)
 		if !bytes.Equal(buf, value) {
 			t.Fatalf("seed=%d; unexpected value obtained for key=%q; got len(value)=%d; want len(value)=%d", seed, key, len(buf), len(value))
 		}

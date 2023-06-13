@@ -133,14 +133,11 @@ func BenchmarkCacheSet(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(items)
 	b.RunParallel(func(pb *testing.PB) {
-		k := []byte("\x00\x00\x00\x00")
+		k := uint64(1)
 		v := []byte("xyza")
 		for pb.Next() {
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
+				k++
 				c.Set(k, v)
 			}
 		}
@@ -151,13 +148,11 @@ func BenchmarkCacheGet(b *testing.B) {
 	const items = 1 << 16
 	c := New(12 * items)
 	defer c.Reset()
-	k := []byte("\x00\x00\x00\x00")
+	k := uint64(1)
 	v := []byte("xyza")
 	for i := 0; i < items; i++ {
-		k[0]++
-		if k[0] == 0 {
-			k[1]++
-		}
+		k++
+
 		c.Set(k, v)
 	}
 
@@ -165,13 +160,10 @@ func BenchmarkCacheGet(b *testing.B) {
 	b.SetBytes(items)
 	b.RunParallel(func(pb *testing.PB) {
 		var buf []byte
-		k := []byte("\x00\x00\x00\x00")
 		for pb.Next() {
+			k := uint64(1)
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
+				k++
 				buf = c.Get(buf[:0], k)
 				if string(buf) != string(v) {
 					panic(fmt.Errorf("BUG: invalid value obtained; got %q; want %q", buf, v))
@@ -185,25 +177,19 @@ func BenchmarkCacheHas(b *testing.B) {
 	const items = 1 << 16
 	c := New(12 * items)
 	defer c.Reset()
-	k := []byte("\x00\x00\x00\x00")
+	k := uint64(1)
 	for i := 0; i < items; i++ {
-		k[0]++
-		if k[0] == 0 {
-			k[1]++
-		}
+		k++
 		c.Set(k, nil)
 	}
 
 	b.ReportAllocs()
 	b.SetBytes(items)
 	b.RunParallel(func(pb *testing.PB) {
-		k := []byte("\x00\x00\x00\x00")
 		for pb.Next() {
+			k := uint64(1)
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
+				k++
 				if !c.Has(k) {
 					panic(fmt.Errorf("BUG: missing value for key %q", k))
 				}
@@ -219,22 +205,18 @@ func BenchmarkCacheSetGet(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(2 * items)
 	b.RunParallel(func(pb *testing.PB) {
-		k := []byte("\x00\x00\x00\x00")
+
 		v := []byte("xyza")
 		var buf []byte
 		for pb.Next() {
+			k := uint64(1)
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
+				k++
 				c.Set(k, v)
 			}
+			k = 1
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
+				k++
 				buf = c.Get(buf[:0], k)
 				if string(buf) != string(v) {
 					panic(fmt.Errorf("BUG: invalid value obtained; got %q; want %q", buf, v))

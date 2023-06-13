@@ -5,7 +5,7 @@ import (
 )
 
 func BenchmarkSetBig(b *testing.B) {
-	key := []byte("key12345")
+	key := uint64(12345)
 	value := createValue(256*1024, 0)
 	c := New(1024 * 1024)
 	b.SetBytes(int64(len(value)))
@@ -18,7 +18,7 @@ func BenchmarkSetBig(b *testing.B) {
 }
 
 func BenchmarkGetBig(b *testing.B) {
-	key := []byte("key12345")
+	key := uint64(12345)
 	value := createValue(265*1024, 0)
 	c := New(1024 * 1024)
 	c.SetBig(key, value)
