@@ -228,21 +228,18 @@ func BenchmarkCacheSetGet(b *testing.B) {
 
 func BenchmarkStdMapSet(b *testing.B) {
 	const items = 1 << 16
-	m := make(map[string][]byte)
+	m := make(map[uint64][]byte)
 	var mu sync.Mutex
 	b.ReportAllocs()
 	b.SetBytes(items)
 	b.RunParallel(func(pb *testing.PB) {
-		k := []byte("\x00\x00\x00\x00")
 		v := []byte("xyza")
 		for pb.Next() {
+			k := uint64(1)
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
+				k++
 				mu.Lock()
-				m[string(k)] = v
+				m[k] = v
 				mu.Unlock()
 			}
 		}
@@ -251,30 +248,24 @@ func BenchmarkStdMapSet(b *testing.B) {
 
 func BenchmarkStdMapGet(b *testing.B) {
 	const items = 1 << 16
-	m := make(map[string][]byte)
-	k := []byte("\x00\x00\x00\x00")
+	m := make(map[uint64][]byte)
+	k := uint64(1)
 	v := []byte("xyza")
 	for i := 0; i < items; i++ {
-		k[0]++
-		if k[0] == 0 {
-			k[1]++
-		}
-		m[string(k)] = v
+		k++
+		m[k] = v
 	}
 
 	var mu sync.RWMutex
 	b.ReportAllocs()
 	b.SetBytes(items)
 	b.RunParallel(func(pb *testing.PB) {
-		k := []byte("\x00\x00\x00\x00")
 		for pb.Next() {
+			k := uint64(1)
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
+				k++
 				mu.RLock()
-				vv := m[string(k)]
+				vv := m[k]
 				mu.RUnlock()
 				if string(vv) != string(v) {
 					panic(fmt.Errorf("BUG: unexpected value; got %q; want %q", vv, v))
@@ -286,30 +277,25 @@ func BenchmarkStdMapGet(b *testing.B) {
 
 func BenchmarkStdMapSetGet(b *testing.B) {
 	const items = 1 << 16
-	m := make(map[string][]byte)
+	m := make(map[uint64][]byte)
 	var mu sync.RWMutex
 	b.ReportAllocs()
 	b.SetBytes(2 * items)
 	b.RunParallel(func(pb *testing.PB) {
-		k := []byte("\x00\x00\x00\x00")
 		v := []byte("xyza")
 		for pb.Next() {
+			k := uint64(1)
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
+				k++
 				mu.Lock()
-				m[string(k)] = v
+				m[k] = v
 				mu.Unlock()
 			}
+			k = 1
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
+				k++
 				mu.RLock()
-				vv := m[string(k)]
+				vv := m[k]
 				mu.RUnlock()
 				if string(vv) != string(v) {
 					panic(fmt.Errorf("BUG: unexpected value; got %q; want %q", vv, v))
@@ -325,15 +311,12 @@ func BenchmarkSyncMapSet(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(items)
 	b.RunParallel(func(pb *testing.PB) {
-		k := []byte("\x00\x00\x00\x00")
 		v := "xyza"
 		for pb.Next() {
+			k := uint64(1)
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
-				m.Store(string(k), v)
+				k++
+				m.Store(k, v)
 			}
 		}
 	})
@@ -342,27 +325,21 @@ func BenchmarkSyncMapSet(b *testing.B) {
 func BenchmarkSyncMapGet(b *testing.B) {
 	const items = 1 << 16
 	m := sync.Map{}
-	k := []byte("\x00\x00\x00\x00")
 	v := "xyza"
+	k := uint64(1)
 	for i := 0; i < items; i++ {
-		k[0]++
-		if k[0] == 0 {
-			k[1]++
-		}
-		m.Store(string(k), v)
+		k++
+		m.Store(k, v)
 	}
 
 	b.ReportAllocs()
 	b.SetBytes(items)
 	b.RunParallel(func(pb *testing.PB) {
-		k := []byte("\x00\x00\x00\x00")
 		for pb.Next() {
+			k := uint64(1)
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
-				vv, ok := m.Load(string(k))
+				k++
+				vv, ok := m.Load(k)
 				if !ok || vv.(string) != string(v) {
 					panic(fmt.Errorf("BUG: unexpected value; got %q; want %q", vv, v))
 				}
@@ -377,22 +354,17 @@ func BenchmarkSyncMapSetGet(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(2 * items)
 	b.RunParallel(func(pb *testing.PB) {
-		k := []byte("\x00\x00\x00\x00")
 		v := "xyza"
 		for pb.Next() {
+			k := uint64(1)
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
-				m.Store(string(k), v)
+				k++
+				m.Store(k, v)
 			}
+			k = 1
 			for i := 0; i < items; i++ {
-				k[0]++
-				if k[0] == 0 {
-					k[1]++
-				}
-				vv, ok := m.Load(string(k))
+				k++
+				vv, ok := m.Load(k)
 				if !ok || vv.(string) != string(v) {
 					panic(fmt.Errorf("BUG: unexpected value; got %q; want %q", vv, v))
 				}
